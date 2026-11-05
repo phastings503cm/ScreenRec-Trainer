@@ -78,11 +78,15 @@ jobs:
           dotnet tool install --global wix --version 5.0.2
           $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
           wix extension add -g WixToolset.UI.wixext/5.0.2
-          # PublishDir must be absolute: WiX resolves relative paths against the .wxs folder, not $PWD.
-          $pub = (Resolve-Path "out/ScreenRecTrainer").Path + "\"
+          # PublishDir must be absolute (WiX resolves relative paths against the .wxs folder), forward-slashed
+          # and WITHOUT a trailing separator — "D:\...\dir\" + "/**" silently harvests nothing on Windows.
+          $pub = ((Resolve-Path "out/ScreenRecTrainer").Path).Replace('\', '/')
+          Write-Host "PublishDir=$pub; files=$($(Get-ChildItem $pub -File).Count)"
           wix build -arch ${{ matrix.arch }} -ext WixToolset.UI.wixext `
-            -d Version=$v -d PublishDir=$pub `
+            -d "Version=$v" -d "PublishDir=$pub" `
             -o "ScreenRecTrainer-$v-win-${{ matrix.arch }}.msi" packaging/windows/ScreenRecTrainer.wxs
+          if ($LASTEXITCODE -ne 0) { throw "wix build failed with exit code $LASTEXITCODE" }
+          Get-ChildItem *.cab -ErrorAction SilentlyContinue | Select-Object Name, Length
           $msi = Get-Item "ScreenRecTrainer-$v-win-${{ matrix.arch }}.msi"
           if ($msi.Length -lt 50MB) { throw "MSI is only $($msi.Length) bytes — the payload was not embedded" }
           $msi | Select-Object Name, Length
