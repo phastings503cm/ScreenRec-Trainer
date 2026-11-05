@@ -1,0 +1,62 @@
+<!--
+  ScreenRec Trainer MSI installer (WiX v6). Built by .github/workflows/release.yml on windows-latest:
+
+    wix build -arch x64 -ext WixToolset.UI.wixext -dVersion=1.0.N -dPublishDir=out/ScreenRecTrainer/ \
+              -o ScreenRecTrainer-1.0.N-win-x64.msi packaging/windows/ScreenRecTrainer.wxs
+
+  Installs the desktop GUI (ScreenRecTrainer.exe) and the screenrec CLI into Program Files\ScreenRecTrainer,
+  adds a Start Menu shortcut and puts the folder on the machine PATH so `screenrec` works in any terminal.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="ScreenRec Trainer"
+           Manufacturer="503cm"
+           Version="$(var.Version)"
+           UpgradeCode="4E1D322D-3697-4C62-81AF-F05A1FE89054"
+           Scope="perMachine"
+           InstallerVersion="500"
+           Compressed="yes"
+           Language="1033">
+
+    <SummaryInformation Description="ScreenRec Trainer — record how an expert works, turn it into training" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed. Please uninstall it first." />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="ScreenRecTrainer" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ShortcutFolder" Name="ScreenRec Trainer" />
+    </StandardDirectory>
+
+    <!-- Everything dotnet publish produced: the GUI, the CLI and the .NET runtime -->
+    <ComponentGroup Id="Published" Directory="INSTALLFOLDER">
+      <Files Include="$(var.PublishDir)/**" />
+    </ComponentGroup>
+
+    <ComponentGroup Id="Extras">
+      <!-- machine PATH so the CLI works everywhere -->
+      <Component Directory="INSTALLFOLDER" Id="PathEnv" Guid="22404435-FB7C-4265-9A5E-4ADB1D2DE852">
+        <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Part="last" Action="set" System="yes" />
+        <RegistryValue Root="HKLM" Key="Software\503cm\ScreenRecTrainer" Name="PathEnv" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <!-- Start Menu shortcut to the GUI -->
+      <Component Directory="ShortcutFolder" Id="Shortcuts" Guid="79674E25-1CEA-4178-A3DE-049624932C49">
+        <Shortcut Id="StartMenuScreenRecTrainer"
+                  Name="ScreenRec Trainer"
+                  Description="Record how an expert works and turn it into training"
+                  Target="[INSTALLFOLDER]ScreenRecTrainer.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Directory="ShortcutFolder" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\503cm\ScreenRecTrainer" Name="Shortcuts" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="ScreenRec Trainer" Description="The ScreenRec Trainer desktop app and screenrec command line." Level="1">
+      <ComponentGroupRef Id="Published" />
+      <ComponentRef Id="PathEnv" />
+      <ComponentRef Id="Shortcuts" />
+    </Feature>
+  </Package>
+</Wix>

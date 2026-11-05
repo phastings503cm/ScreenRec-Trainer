@@ -71,10 +71,23 @@ jobs:
           $p = Start-Process out/ScreenRecTrainer/ScreenRecTrainer.exe -ArgumentList "--self-test","$env:RUNNER_TEMP/shots" -PassThru -Wait
           if ($p.ExitCode -ne 0) { throw "self-test failed ($($p.ExitCode))" }
           Get-ChildItem "$env:RUNNER_TEMP/shots"
+      - name: Build MSI installer
+        shell: pwsh
+        run: |
+          $v = "${{ needs.test.outputs.version }}"
+          dotnet tool install --global wix --version 5.0.2
+          $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+          wix build -arch ${{ matrix.arch }} -ext WixToolset.UI.wixext `
+            -d Version=$v -d PublishDir="out/ScreenRecTrainer/" `
+            -o "ScreenRecTrainer-$v-win-${{ matrix.arch }}.msi" packaging/windows/ScreenRecTrainer.wxs
+          Get-Item *.msi | Select-Object Name, Length
       - uses: actions/upload-artifact@v4
         with:
           name: win-${{ matrix.arch }}
-          path: ScreenRecTrainer-*.zip
+          path: |
+            ScreenRecTrainer-*.zip
+            ScreenRecTrainer-*.msi
 
   macos:
     needs: test
@@ -87,14 +100,13 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - name: Package .app
+      - name: Package .app and .dmg
         run: |
           v="${{ needs.test.outputs.version }}"
           sed -i '' "s#<string>1.0.0</string>#<string>$v</string>#g" packaging/macos/Info.plist
           ./scripts/package-mac.sh ${{ matrix.rid }}
-          cd artifacts/${{ matrix.rid }}
-          mv "ScreenRecTrainer-${{ matrix.rid }}.zip" "../../ScreenRecTrainer-$v-${{ matrix.rid }}.zip"
-          ditto -c -k cli "../../screenrec-cli-$v-${{ matrix.rid }}.zip"
+          mv "artifacts/${{ matrix.rid }}/ScreenRecTrainer-${{ matrix.rid }}.dmg" "ScreenRecTrainer-$v-${{ matrix.rid }}.dmg"
+          mv "artifacts/${{ matrix.rid }}/screenrec-cli-${{ matrix.rid }}.zip" "screenrec-cli-$v-${{ matrix.rid }}.zip"
       - name: UI self-test
         if: matrix.rid == 'osx-arm64'
         run: |
@@ -105,7 +117,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.rid }}
-          path: "*.zip"
+          path: |
+            ScreenRecTrainer-*.dmg
+            screenrec-cli-*.zip
 
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -121,18 +135,22 @@ jobs:
           merge-multiple: true
       - name: Checksums and notes
         run: |
-          cd dist && sha256sum *.zip > SHA256SUMS && cat SHA256SUMS && cd ..
+          cd dist && sha256sum *.msi *.dmg *.zip > SHA256SUMS && cat SHA256SUMS && cd ..
           prev=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
           {
             echo "## ScreenRec Trainer v${{ needs.test.outputs.version }}"
             echo
             echo "| Download | For |"
             echo "|---|---|"
-            echo "| \`ScreenRecTrainer-*-win-x64.zip\` | Windows 10/11 (Intel/AMD) — unzip, run ScreenRecTrainer.exe |"
-            echo "| \`ScreenRecTrainer-*-win-arm64.zip\` | Windows on ARM |"
-            echo "| \`ScreenRecTrainer-*-osx-arm64.zip\` | Mac with Apple silicon — unzip, move to Applications, right-click › Open the first time |"
-            echo "| \`ScreenRecTrainer-*-osx-x64.zip\` | Intel Mac |"
+            echo "| \`ScreenRecTrainer-*-win-x64.msi\` | **Windows 10/11 (Intel/AMD) — installer** (GUI + CLI, Start Menu shortcut, CLI on PATH) |"
+            echo "| \`ScreenRecTrainer-*-win-arm64.msi\` | **Windows on ARM — installer** |"
+            echo "| \`ScreenRecTrainer-*-win-*.zip\` | Windows, portable (no install) — unzip and run \`ScreenRecTrainer.exe\` |"
+            echo "| \`ScreenRecTrainer-*-osx-arm64.dmg\` | **Mac with Apple silicon — installer** — open the .dmg and drag the app to Applications |"
+            echo "| \`ScreenRecTrainer-*-osx-x64.dmg\` | **Intel Mac — installer** |"
             echo "| \`screenrec-cli-*.zip\` | macOS command line |"
+            echo
+            echo "First launch on macOS: right-click the app › **Open** (it is ad-hoc signed, not notarized). Then allow"
+            echo "**Screen Recording** and **Input Monitoring** for it in System Settings › Privacy & Security."
             echo
             echo "### Changes"
             if [ -n "$prev" ]; then git log --pretty='- %s (%h)' "$prev"..HEAD; else git log --pretty='- %s (%h)' -20; fi
@@ -142,4 +160,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="v${{ needs.test.outputs.version }}"
-          gh release create "$tag" dist/*.zip dist/SHA256SUMS --target "$GITHUB_SHA" --title "ScreenRec Trainer $tag" --notes-file notes.md --latest
+          gh release create "$tag" dist/*.msi dist/*.dmg dist/*.zip dist/SHA256SUMS --target "$GITHUB_SHA" --title "ScreenRec Trainer $tag" --notes-file notes.md --latest

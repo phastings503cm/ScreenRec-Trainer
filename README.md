@@ -69,6 +69,17 @@ screenrec expert Maria --publish
 screenrec check-input | test-ai | whoami | models | list | settings
 ```
 
+## Install
+
+Download from **[the latest release](https://github.com/phastings503cm/ScreenRec-Trainer/releases/latest)**:
+
+* **Windows:** run `ScreenRecTrainer-v*-win-x64.msi` (or `-win-arm64.msi`). It installs the desktop GUI plus the
+  `screenrec` CLI into Program Files, adds a Start Menu shortcut and puts the CLI on PATH. A portable `.zip` is
+  there too if you don't want to install anything.
+* **macOS:** open `ScreenRecTrainer-v*-osx-arm64.dmg` (Apple silicon) or `-osx-x64.dmg` (Intel) and drag
+  **ScreenRec Trainer** to Applications. First launch: right-click the app › **Open** (the build is ad-hoc signed,
+  not notarized). Then allow *Screen Recording* and *Input Monitoring* in System Settings › Privacy & Security.
+
 ## Build
 
 You need the [.NET 10 SDK](https://dotnet.microsoft.com/download).
@@ -77,23 +88,26 @@ You need the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 dotnet build ScreenRec.sln
 dotnet test  tests/ScreenRec.Core.Tests
 dotnet run --project src/ScreenRec.App            # the desktop app
-./scripts/package-mac.sh osx-arm64                # → artifacts/osx-arm64/ScreenRec Trainer.app + zip (ad-hoc signed)
-pwsh ./scripts/package-win.ps1                    # → artifacts/win-x64|win-arm64/ScreenRecTrainer-*.zip
+./scripts/package-mac.sh osx-arm64                # → artifacts/osx-arm64/*.dmg + screenrec-cli zip (ad-hoc signed)
+pwsh ./scripts/package-win.ps1                    # → artifacts/win-x64|win-arm64/ScreenRecTrainer-*.zip + .msi
 ScreenRecTrainer --self-test <folder>             # renders every tab to PNG, exits non-zero on error
 ```
 
-Both targets cross-compile from either OS (`dotnet publish -r win-x64` works on a Mac).
+Both targets cross-compile from either OS (`dotnet publish -r win-x64` works on a Mac). The Windows MSI is built with
+[WiX](https://wixtoolset.org) (`packaging/windows/ScreenRecTrainer.wxs`) and must be built on Windows — WiX refuses
+`Directory/@Name` off-Windows (it canonicalises paths against `C:\`).
 
 ### Releases (CI/CD)
 
 `.github/workflows/release.yml` runs on every push:
 
 1. **Build and test** on macOS.
-2. **Package** Windows x64/arm64 (the tests run again on Windows) and macOS arm64/x64 `.app` bundles. Each platform also
-   runs the app's UI self-test against a demo recording.
-3. **Release:** on `main` only, a GitHub release tagged `v<major>.<minor>.<commit count>` is published with the zips,
-   `SHA256SUMS` and notes listing the commits. To change the major/minor version, edit `VersionPrefix` in
-   `Directory.Build.props`.
+2. **Package** Windows x64/arm64 — the tests run again on Windows, then a **WiX MSI installer** is built — and macOS
+   arm64/x64 — an **.app in a drag-to-Applications .dmg** plus the CLI zip. Each platform also runs the app's UI
+   self-test against a demo recording.
+3. **Release:** on `main` only, a GitHub release tagged `v<major>.<minor>.<commit count>` is published with the MSIs,
+   DMGs, portable zips, `SHA256SUMS` and notes listing the commits. To change the major/minor version, edit
+   `VersionPrefix` in `Directory.Build.props`.
 
 Other branches and pull requests get steps 1–2 only. The Mac build is ad-hoc signed, not notarized, so open it the
 first time with right-click › Open.
