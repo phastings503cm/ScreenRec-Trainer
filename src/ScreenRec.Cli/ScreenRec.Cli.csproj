@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>screenrec</AssemblyName>
+    <RootNamespace>ScreenRec.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ScreenRec.Core\ScreenRec.Core.csproj" />
+  </ItemGroup>
+</Project>

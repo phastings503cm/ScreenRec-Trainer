@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>ScreenRec Trainer</string>
+  <key>CFBundleDisplayName</key><string>ScreenRec Trainer</string>
+  <key>CFBundleIdentifier</key><string>com.503cm.screenrec-trainer</string>
+  <key>CFBundleVersion</key><string>1.0.0</string>
+  <key>CFBundleShortVersionString</key><string>1.0.0</string>
+  <key>CFBundleExecutable</key><string>ScreenRecTrainer</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSScreenCaptureUsageDescription</key><string>ScreenRec Trainer records your screen so AI can learn the task you are demonstrating.</string>
+  <key>NSAppleEventsUsageDescription</key><string>ScreenRec Trainer reads which app is in front to label each step.</string>
+</dict>
+</plist>
