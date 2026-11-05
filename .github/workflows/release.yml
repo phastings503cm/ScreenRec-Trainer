@@ -1,0 +1,145 @@
+# Every push to main: build, test, package Windows (x64/arm64) and macOS (arm64/x64), and publish a GitHub release
+# tagged v<major>.<minor>.<commit count> with the zips and SHA256SUMS. Pull requests and other branches: build + test only.
+name: build-and-release
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  test:
+    runs-on: macos-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - id: version
+        run: |
+          prefix=$(sed -n 's:.*<VersionPrefix>\([0-9]*\.[0-9]*\).*</VersionPrefix>.*:\1:p' Directory.Build.props)
+          echo "version=${prefix}.$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+      - run: dotnet build ScreenRec.sln -c Release
+      - run: dotnet test tests/ScreenRec.Core.Tests -c Release --no-build --logger "console;verbosity=normal"
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Test on Windows
+        if: matrix.arch == 'x64'
+        run: dotnet test tests/ScreenRec.Core.Tests -c Release
+      - name: Publish
+        shell: pwsh
+        run: |
+          $v = "${{ needs.test.outputs.version }}"
+          $out = "out/ScreenRecTrainer"
+          dotnet publish src/ScreenRec.App -c Release -r win-${{ matrix.arch }} --self-contained -p:Version=$v -o $out
+          dotnet publish src/ScreenRec.Cli -c Release -r win-${{ matrix.arch }} --self-contained -p:Version=$v -o $out
+          Copy-Item README.md $out
+          Compress-Archive -Path "$out/*" -DestinationPath "ScreenRecTrainer-$v-win-${{ matrix.arch }}.zip"
+      - name: UI self-test
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          $env:SCREENREC_HOME = "$env:RUNNER_TEMP/srhome"
+          out/ScreenRecTrainer/screenrec.exe demo
+          $p = Start-Process out/ScreenRecTrainer/ScreenRecTrainer.exe -ArgumentList "--self-test","$env:RUNNER_TEMP/shots" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "self-test failed ($($p.ExitCode))" }
+          Get-ChildItem "$env:RUNNER_TEMP/shots"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-${{ matrix.arch }}
+          path: ScreenRecTrainer-*.zip
+
+  macos:
+    needs: test
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        rid: [osx-arm64, osx-x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Package .app
+        run: |
+          v="${{ needs.test.outputs.version }}"
+          sed -i '' "s#<string>1.0.0</string>#<string>$v</string>#g" packaging/macos/Info.plist
+          ./scripts/package-mac.sh ${{ matrix.rid }}
+          cd artifacts/${{ matrix.rid }}
+          mv "ScreenRecTrainer-${{ matrix.rid }}.zip" "../../ScreenRecTrainer-$v-${{ matrix.rid }}.zip"
+          ditto -c -k cli "../../screenrec-cli-$v-${{ matrix.rid }}.zip"
+      - name: UI self-test
+        if: matrix.rid == 'osx-arm64'
+        run: |
+          export SCREENREC_HOME="$RUNNER_TEMP/srhome"
+          artifacts/osx-arm64/cli/screenrec demo
+          "artifacts/osx-arm64/ScreenRec Trainer.app/Contents/MacOS/ScreenRecTrainer" --self-test "$RUNNER_TEMP/shots"
+          ls "$RUNNER_TEMP/shots"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: "*.zip"
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums and notes
+        run: |
+          cd dist && sha256sum *.zip > SHA256SUMS && cat SHA256SUMS && cd ..
+          prev=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+          {
+            echo "## ScreenRec Trainer v${{ needs.test.outputs.version }}"
+            echo
+            echo "| Download | For |"
+            echo "|---|---|"
+            echo "| \`ScreenRecTrainer-*-win-x64.zip\` | Windows 10/11 (Intel/AMD) — unzip, run ScreenRecTrainer.exe |"
+            echo "| \`ScreenRecTrainer-*-win-arm64.zip\` | Windows on ARM |"
+            echo "| \`ScreenRecTrainer-*-osx-arm64.zip\` | Mac with Apple silicon — unzip, move to Applications, right-click › Open the first time |"
+            echo "| \`ScreenRecTrainer-*-osx-x64.zip\` | Intel Mac |"
+            echo "| \`screenrec-cli-*.zip\` | macOS command line |"
+            echo
+            echo "### Changes"
+            if [ -n "$prev" ]; then git log --pretty='- %s (%h)' "$prev"..HEAD; else git log --pretty='- %s (%h)' -20; fi
+          } > notes.md
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ needs.test.outputs.version }}"
+          gh release create "$tag" dist/*.zip dist/SHA256SUMS --target "$GITHUB_SHA" --title "ScreenRec Trainer $tag" --notes-file notes.md --latest
