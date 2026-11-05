@@ -1,5 +1,7 @@
 # ScreenRec Trainer
 
+[![build-and-release](https://github.com/phastings503cm/ScreenRec-Trainer/actions/workflows/release.yml/badge.svg)](https://github.com/phastings503cm/ScreenRec-Trainer/actions/workflows/release.yml) · **[Download the latest release](https://github.com/phastings503cm/ScreenRec-Trainer/releases/latest)**
+
 A C# desktop app for **Windows and macOS** that records how an expert works, has AI turn the recording into training
 material, and puts the result into **Guardian**: as a skill (so a person, or Guardian's AI, can learn to work the way the
 expert does) and as a Guardian **automation**.
@@ -81,6 +83,20 @@ ScreenRecTrainer --self-test <folder>             # renders every tab to PNG, ex
 ```
 
 Both targets cross-compile from either OS (`dotnet publish -r win-x64` works on a Mac).
+
+### Releases (CI/CD)
+
+`.github/workflows/release.yml` runs on every push:
+
+1. **Build and test** on macOS.
+2. **Package** Windows x64/arm64 (the tests run again on Windows) and macOS arm64/x64 `.app` bundles. Each platform also
+   runs the app's UI self-test against a demo recording.
+3. **Release:** on `main` only, a GitHub release tagged `v<major>.<minor>.<commit count>` is published with the zips,
+   `SHA256SUMS` and notes listing the commits. To change the major/minor version, edit `VersionPrefix` in
+   `Directory.Build.props`.
+
+Other branches and pull requests get steps 1–2 only. The Mac build is ad-hoc signed, not notarized, so open it the
+first time with right-click › Open.
 
 ### Layout
 
