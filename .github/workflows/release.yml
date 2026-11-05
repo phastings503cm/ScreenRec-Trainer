@@ -86,11 +86,12 @@ jobs:
             -d "Version=$v" -d "PublishDir=$pub" `
             -o "ScreenRecTrainer-$v-win-${{ matrix.arch }}.msi" packaging/windows/ScreenRecTrainer.wxs
           if ($LASTEXITCODE -ne 0) { throw "wix build failed with exit code $LASTEXITCODE" }
-          Get-ChildItem *.cab -ErrorAction SilentlyContinue | Select-Object Name, Length
+          Get-ChildItem -Recurse -Filter *.cab | Select-Object FullName, Length
           $msi = Get-Item "ScreenRecTrainer-$v-win-${{ matrix.arch }}.msi"
           if ($msi.Length -lt 50MB) { throw "MSI is only $($msi.Length) bytes — the payload was not embedded" }
           $msi | Select-Object Name, Length
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: win-${{ matrix.arch }}
           path: |

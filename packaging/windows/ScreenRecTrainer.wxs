@@ -21,6 +21,8 @@
     <SummaryInformation Description="ScreenRec Trainer — record how an expert works, turn it into training" />
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed. Please uninstall it first." />
+    <!-- EmbedCab is required: without it WiX leaves the .cab outside the MSI and the payload is lost. -->
+    <MediaTemplate EmbedCab="yes" />
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
